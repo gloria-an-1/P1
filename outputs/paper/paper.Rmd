@@ -1,0 +1,277 @@
+---
+title: "My title"
+subtitle: "My subtitle if needed"
+author: 
+  - Nan An
+
+thanks: "Code and data are available at: LINK."
+date: "`r format(Sys.time(), '%d %B %Y')`"
+abstract: "First sentence. Second sentence. Third sentence. Fourth sentence."
+output:
+  bookdown::pdf_document2
+toc: FALSE
+bibliography: references.bib
+---
+
+# Introduction
+
+Construction of rental apartments in the GTA hits a 30-year high(REF1)
+
+You can and should cross-reference sections and sub-sections. For instance, Section \@ref(data). R Markdown automatically makes the sections lower case and adds a dash to spaces to generate labels, for instance, Section \@ref(first-discussion-point). 
+
+
+# Data
+## Data Source
+This report utilizes data on Apartment Building Evaluation in Toronto obtained from Open Data Toronto. This valuation is conducted by RentSafeTO, which is a bylaw enforcement program established in 2017. Apartment Building Standards are made by them to ensure that owners and operators of apartment buildings comply with building maintenance standards. 
+
+To make the Apartment Building Evaluation data more accurate, these buildings undergo evaluation at least once every three years, including common areas, mechanical and security systems, parking and exterior grounds. Except the separate scores for each item, there is a overall score for each department. In addition, this data frame also includes the information such as the ID number for a building, the year that the building was built in, the ward that the building is located in. 
+The dataset was last updated on Feb 5, 2022.
+
+Our data is of penguins (Figure \@ref(fig:bills)).
+
+## Methodology and Data Collection
+Apartment and building are inspected by each item, assigned a score from one to five, with one being the lowest and five being the highest. The scales include evaluating comprehensive aspects, such as the condition of the lobby, entrance doors and windows, the security system, elevator, as well as the garbage bin storage room. If an item is not applicable to the building at the time of evaluation, the score will show as blank in the data set. 
+
+In the following analysis, we will focus on the overall score to evaluate each building, which is the sum total of each item that was evaluated. The formula is calculated as follows: sum of all assigned scores during the evaluation / (number of unique items reviewed *5). 
+
+According to Bloomberg, most current Toronto houses are built between 1946 and 1960, especially up to a million Victory Houses across Canada, where some of them are still stand in Toronto(REF4:How Wartime Victory Houses Shaped Modern Toronto,2021). Thus, we select the data of buildings built after 1940 to make a more accurate analysis in terms of overall existing houses in Toronto.
+
+The disadvantage of this data is that the sample number of buildings built between 1970 to 2021 in Toronto is not that great, compared to the total population. Each year,there are around 10,000 to 13,000 new homes that are built in GTA(RE3:Record year for the GTA new homes market,2017). However, after filtering the data of buildings built after 1970, there are only 2028 buildings' information left in total.There might be discrepancy when getting the evaluation result of the buildings. However, we can still use it as this data is that the evaluation way through RentSafeTO, which is a generally applicable standard set up by The City of Toronto, which is a standardized and convincing building evaluation method(REF2). 
+
+
+
+```{r setup, message = FALSE, warning = FALSE, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(palmerpenguins)
+
+```
+
+
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+library(opendatatoronto)
+library(dplyr)
+
+# get package
+package <- show_package("4ef82789-e038-44ef-a478-a8f3590c3eb1")
+package
+
+# get all resources for this package
+resources <- list_package_resources("4ef82789-e038-44ef-a478-a8f3590c3eb1")
+
+# identify datastore resources; by default, Toronto Open Data sets datastore resource format to CSV for non-geospatial and GeoJSON for geospatial resources
+datastore_resources <- filter(resources, tolower(format) %in% c('csv', 'geojson'))
+
+# load the first datastore resource as a sample
+data <- filter(datastore_resources, row_number()==1) %>% get_resource()
+head(data)
+```
+
+
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+# In this analysis, we only need the data of overall scores, location area, and built-year, so we select the data that contains these information and make a new data frame as following.
+
+data <- 
+  data |>
+  select(YEAR_BUILT, 
+         SCORE, 
+         WARDNAME)
+
+#Remove rows with NA in each column of the data
+new_data <-
+data |>
+drop_na(WARDNAME) |>
+  drop_na(SCORE) |>
+  drop_na(YEAR_BUILT)
+
+head(new_data)
+```
+
+
+
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+#Check the type of the value in each column
+str(new_data)
+
+#Change the type of score and built-year from character to integer.
+new_data$SCORE <-
+as.integer(new_data$SCORE)
+
+new_data$YEAR_BUILT <-
+as.integer(new_data$YEAR_BUILT)
+
+str(new_data)
+```
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+#According to Bloomberg, most current Toronto houses are built between 1946 and 1960(REF4:How Wartime Victory Houses Shaped Modern Toronto,2021). Thus, we select the data of buildings built after 1940.
+
+data_po1940 <-
+new_data |>
+        filter(YEAR_BUILT > 1940)
+data_po1940
+
+nrow(data_po1940)
+
+#After filtering the data of buildings only built after 1940, there are 8641 buildings' information left in the new data frame.
+```
+### The ranking of the houses' scores of each ward
+```{r, message = FALSE, warning = FALSE}
+## Calculate the average of houses' score in terms of each ward in Toronto. There are 25 wards in Toronto, so there are 25 data of average scores.
+
+summary_table <- 
+  data_po1940 |>
+   group_by(WARDNAME) |>
+  summarise(ward_score = mean(SCORE)) 
+
+## Arrange the list of average scores in each ward from the highest to the lowest.
+desc_summary_table <-
+summary_table |> 
+  arrange(desc(ward_score))
+
+knitr::kable(desc_summary_table)
+
+```
+
+
+
+
+Refer the ranking with the map of wards in Toronto
+
+![Toronto Wards Map]("/Users/gloriaan/Desktop/Ward name_Toronto.png")
+
+We can find the top three wards with the highest scores are Scarborough North(80.9), Don Valley North(79.2) and Scarborough-Agincourt(78.0), and the ward with the lowest score is Humber River-Black Creek(68.7).
+
+
+```{r 1, fig.cap ="Houses' Scores in Toronto", fig.width=5, fig.height=3, echo = FALSE, message = FALSE, warning = FALSE}
+
+data_po1940 |>
+  ggplot(aes(x = SCORE)) + 
+  geom_histogram(fill = "pink", color = "black", bins =12) + theme_classic() +
+  labs(x = "Overall Score", y = "Frequency", title = "Histogram of houses' scores in Toronto")
+
+```
+
+### Calculate the percentage of scores that lie between 65 and 85.
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+
+Total<-nrow(data_po1940)
+Score_range<-sum(data_po1940 >= 65 & data_po1940 <= 85)
+sum(Score_range/Total)
+
+```
+
+From the histogram, we can tell that the mode, mean and median of Number of the houses with the specific score are similar at 73, which supports that the distribution of the houses' scores in Toronto is symmetric. The average score of overall departments that are built after 1960 in Toronto is 73. 
+
+The overall evaluation score will determine next steps for City action. The evaluation scales of RentSafeTO is like normal distribution, which matches the actions of bylaw enforcement officer. Up to 65% of the departments hold a score between 65 to 85. If buildings score 65 per cent or less, then the next evaluation will take place within one year. If the score is between 66 – 85 per cent, the next evaluation will take place within two years and if buildings score 86 percent and above the next evaluation with be within three years(FEF6:RentSafeTO Building Evaluations & Audits,2022).
+
+
+
+
+
+### More Plots
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+summary_table <- 
+  data_po1940 |>
+  summarise(min = min(SCORE),
+                                  Q1 = quantile(SCORE,0.25),
+                                  median = median(SCORE),
+                                  Q3 = quantile(SCORE,0.75),
+                                  max = max(SCORE),
+                                  IQR = Q3 - Q1,
+                                  mean = mean(SCORE), 
+                                  sd = sd(SCORE), 
+                                  Small_Outliers = sum(SCORE < Q1 - 1.5*IQR),
+                                  Large_Outliers = sum(SCORE > Q3 + 1.5*IQR)) 
+# change their orders, add or remove some of them
+knitr::kable(summary_table)
+```
+
+
+
+```{r bills, fig.cap="Bills of penguins", echo = FALSE, message = FALSE, warning = FALSE}
+ggplot(penguins, aes(x = island, fill = species)) +
+  geom_bar(alpha = 0.8) +
+  scale_fill_manual(values = c("darkorange","purple","cyan4"),
+                    guide = FALSE) +
+  theme_minimal() +
+  facet_wrap(~species, ncol = 1) +
+  coord_flip()
+```
+
+Talk more about it.
+
+Also bills and their average (Figure \@ref(fig:billssssss)). (Notice how you can change the height and width so they don't take the whole page?)
+
+```{r billssssss, fig.cap="More bills of penguins", fig.width=8, fig.height=4, echo = FALSE, message = FALSE, warning = FALSE}
+
+# This needs to be about the random data tha tI sasmpled?
+ggplot(penguins, aes(x = island, fill = species)) +
+  geom_bar(alpha = 0.8) +
+  scale_fill_manual(values = c("darkorange","purple","cyan4"),
+                    guide = FALSE) +
+  theme_minimal() +
+  facet_wrap(~species, ncol = 1) +
+  coord_flip()
+```
+
+Talk way more about it. 
+
+
+
+# Model
+
+\begin{equation}
+Pr(\theta | y) = \frac{Pr(y | \theta) Pr(\theta)}{Pr(y)}  (\#eq:bayes)
+\end{equation}
+
+Equation \@ref(eq:bayes) seems useful, eh?
+
+Here's a dumb example of how to use some references: In paper we run our analysis in `R` [@citeR]. We also use the `tidyverse` which was written by @thereferencecanbewhatever If we were interested in baseball data then @citeLahman could be useful. 
+
+We can use maths by including latex between dollar signs, for instance $\theta$.
+
+
+# Results
+
+# Discussion
+
+## First discussion point
+
+If my paper were 10 pages, then should be be at least 2.5 pages. The discussion is a chance to show off what you know and what you learnt from all this. 
+
+## Second discussion point
+
+## Third discussion point
+
+## Weaknesses and next steps
+
+Weaknesses and next steps should also be included.
+
+\newpage
+
+\appendix
+
+# Appendix {-}
+
+
+# Additional details
+
+
+\newpage
+
+
+# References
+
+1. https://dailyhive.com/toronto/construction-rental-apartments-gta-30-year-high
+
+2. https://www.toronto.ca/community-people/housing-shelter/rental-housing-tenant-information/rental-housing-standards/apartment-building-standards/
+
+3. https://bildgta.ca/ourindustry/newhomemarket/Record-year-for-the-GTA-new-homes-market
+
+4. https://www.bloomberg.com/news/features/2021-03-24/the-design-history-of-toronto-s-victory-houses
+
+5. image https://www.toronto.ca/city-government/data-research-maps/neighbourhoods-communities/ward-profiles/
+
+6. https://www.toronto.ca/community-people/housing-shelter/rental-housing-tenant-information/rental-housing-standards/apartment-building-standards/rentsafeto-for-building-owners/rentsafeto-building-evaluations-and-audits/
